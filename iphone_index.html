@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ERP Product Search</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background: #f2f2f7;
+        }
+
+        .container {
+            padding: 16px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .search-container {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 16px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d1d6;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+
+        .button {
+            background: #007aff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        .back-button {
+            background: #f2f2f7;
+            color: #007aff;
+            margin-bottom: 16px;
+        }
+
+        .product-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .product-card:active {
+            background-color: #f2f2f7;
+        }
+
+        .product-image {
+            width: 100%;
+            max-width: 300px;
+            height: auto;
+            margin: 0 auto 16px;
+            display: block;
+        }
+
+        .product-name {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #1c1c1e;
+        }
+
+        .product-details {
+            font-size: 14px;
+            color: #6e6e73;
+            margin-bottom: 8px;
+        }
+
+        .locations-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .locations-table th,
+        .locations-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #f2f2f7;
+        }
+
+        .locations-table th {
+            background: #f8f8f8;
+            font-weight: 600;
+        }
+
+        .view {
+            display: none;
+        }
+
+        .view.active {
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #6e6e73;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="searchView" class="view active">
+            <div class="search-container">
+                <input type="search" 
+                       id="searchInput" 
+                       class="search-input" 
+                       placeholder="Search products..."
+                       autocomplete="off">
+                <button id="searchButton" class="button">Search</button>
+            </div>
+            <div id="results"></div>
+        </div>
+
+        <div id="detailView" class="view">
+            <button id="backButton" class="button back-button">← Back to Search</button>
+            <div id="productDetails"></div>
+        </div>
+    </div>
+
+    <script>
+        const searchView = document.getElementById('searchView');
+        const detailView = document.getElementById('detailView');
+        const searchInput = document.getElementById('searchInput');
+        const searchButton = document.getElementById('searchButton');
+        const resultsDiv = document.getElementById('results');
+        const backButton = document.getElementById('backButton');
+        const productDetails = document.getElementById('productDetails');
+
+        async function searchProducts() {
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            searchButton.disabled = true;
+            resultsDiv.innerHTML = '<div class="loading">Searching...</div>';
+
+            try {
+                const response = await fetch(`/api/search?keyword=${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    resultsDiv.innerHTML = `<div class="error">${data.error}</div>`;
+                    return;
+                }
+
+                displayResults(data);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">Search failed. Please try again.</div>`;
+            } finally {
+                searchButton.disabled = false;
+            }
+        }
+
+        function displayResults(data) {
+            if (!data.data || !data.data.data || !data.data.data.length) {
+                resultsDiv.innerHTML = '<div class="error">No products found</div>';
+                return;
+            }
+
+            resultsDiv.innerHTML = data.data.data.map(item => `
+                <div class="product-card" onclick="showProductDetails(${item.item_id})">
+                    <div class="product-name">${item.item_name}</div>
+                    <div class="product-details">
+                        <div>QOH: ${item.qoh}</div>
+                        <div>Price: $${item.list_price}</div>
+                        <div>Margin: ${item.sz_margin}%</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function showProductDetails(itemId) {
+            searchView.classList.remove('active');
+            detailView.classList.add('active');
+            productDetails.innerHTML = '<div class="loading">Loading product details...</div>';
+
+            try {
+                const response = await fetch(`/api/items/${itemId}`, {
+                    headers: {
+                        "accept": "application/json, text/plain, */*",
+                        "action-name": "PAGE_VIEW",
+                        "app-code": "ERP",
+                        "screen-name": "ERP_ITEM_EDIT_PAGE"
+                    }
+                });
+                const data = await response.json();
+                displayProductDetails(data);
+            } catch (error) {
+                productDetails.innerHTML = '<div class="error">Failed to load product details</div>';
+            }
+        }
+
+        function displayProductDetails(data) {
+            const { item_name, list_price, sz_margin, s3path, item_locations } = data.data;
+            
+            let locationsHtml = `
+                <table class="locations-table">
+                    <thead>
+                        <tr>
+                            <th>Location</th>
+                            <th>QOH</th>
+                            <th>Position</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            item_locations.forEach(location => {
+                const place = location.location_places[0];
+                locationsHtml += `
+                    <tr>
+                        <td>${location.store_name}</td>
+                        <td>${location.qoh}</td>
+                        <td>${place.aisle ? `Aisle ${place.aisle}, Bay ${place.bay}, Shelf ${place.shelf}, Slot ${place.slot}` : 'Not specified'}</td>
+                    </tr>
+                `;
+            });
+
+            locationsHtml += '</tbody></table>';
+
+            productDetails.innerHTML = `
+                <div class="product-card">
+                    <img src="${s3path}" alt="${item_name}" class="product-image">
+                    <div class="product-name">${item_name}</div>
+                    <div class="product-details">
+                        <div>Price: $${list_price}</div>
+                        <div>Margin: ${sz_margin}%</div>
+                    </div>
+                    ${locationsHtml}
+                </div>
+            `;
+        }
+
+        backButton.addEventListener('click', () => {
+            detailView.classList.remove('active');
+            searchView.classList.add('active');
+        });
+
+        searchButton.addEventListener('click', searchProducts);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') searchProducts();
+        });
+    </script>
+</body>
+</html>
